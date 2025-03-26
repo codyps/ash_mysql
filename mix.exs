@@ -126,6 +126,7 @@ defmodule AshMysql.MixProject do
     [
       {:ecto_sql, "~> 3.12"},
       {:myxql, ">= 0.0.0"},
+      {:tds, ">= 0.0.0"},
       {:ecto, "~> 3.12"},
       {:jason, "~> 1.0"},
       {:ash, ash_version("~> 3.0")},
