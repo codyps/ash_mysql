@@ -12,7 +12,7 @@ defmodule AshMysql.Transformers.VerifyRepo do
       match?({:error, _}, Code.ensure_compiled(repo)) ->
         {:error, "Could not find repo module #{repo}"}
 
-      repo.__adapter__() != Ecto.Adapters.MyXQL ->
+      repo.__adapter__() != Ecto.Adapters.Tds ->
         {:error, "Expected a repo using the MySQL adapter `Ecto.Adapters.MyXQL`"}
 
       true ->

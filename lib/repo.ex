@@ -29,7 +29,7 @@ defmodule AshMysql.Repo do
       otp_app = opts[:otp_app] || raise("Must configure OTP app")
 
       use Ecto.Repo,
-        adapter: Ecto.Adapters.MyXQL,
+        adapter: Ecto.Adapters.Tds,
         otp_app: otp_app
 
       @behaviour AshMysql.Repo
