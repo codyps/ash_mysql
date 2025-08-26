@@ -266,7 +266,14 @@ defmodule AshMysql.MigrationGenerator.Operation do
           ", null: #{attribute.allow_nil?}"
         end
 
-      "#{null}#{default}#{primary_key}"
+      size =
+        if attribute.size != old_attribute.size do
+          if attribute[:size] do
+            ", size: #{attribute.size}"
+          end
+        end
+
+      "#{null}#{default}#{primary_key}#{size}"
     end
 
     def up(%{
