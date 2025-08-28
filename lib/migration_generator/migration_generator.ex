@@ -2526,7 +2526,7 @@ defmodule AshMysql.MigrationGenerator do
   end
 
   defp load_type([string, size]) when is_binary(string) and is_integer(size) do
-    {String.to_existing_atom(string), size}
+    {String.to_atom(string), size}
   end
 
   defp load_type(type) do
