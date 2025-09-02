@@ -2063,6 +2063,14 @@ defmodule AshMysql.MigrationGenerator do
     }
   end
 
+  defp type_migration_type(type, constraints) do
+    if function_exported?(type, :mysql_migration_type, 1) do
+       type.mysql_migration_type(constraints)
+    else
+      nil
+    end
+  end
+
   defp attributes(resource, table) do
     repo = AshMysql.DataLayer.Info.repo(resource)
     ignored = AshMysql.DataLayer.Info.migration_ignore_attributes(resource) || []
@@ -2087,10 +2095,11 @@ defmodule AshMysql.MigrationGenerator do
 
       type =
         AshMysql.DataLayer.Info.migration_types(resource)[attribute.name] ||
+        type_migration_type(attribute.type, attribute.constraints) ||
           migration_type(attribute.type, attribute.constraints)
 
       type =
-        if :erlang.function_exported(repo, :override_migration_type, 1) do
+        if function_exported?(repo, :override_migration_type, 1) do
           repo.override_migration_type(type)
         else
           type
