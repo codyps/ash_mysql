@@ -2068,6 +2068,7 @@ defmodule AshMysql.MigrationGenerator do
   end
 
   defp type_migration_type(type, constraints) do
+    Code.ensure_loaded!(type)
     if function_exported?(type, :mysql_migration_type, 1) do
        type.mysql_migration_type(constraints)
     else
@@ -2102,6 +2103,7 @@ defmodule AshMysql.MigrationGenerator do
         type_migration_type(attribute.type, attribute.constraints) ||
           migration_type(attribute.type, attribute.constraints)
 
+      Code.ensure_loaded!(repo)
       type =
         if function_exported?(repo, :override_migration_type, 1) do
           repo.override_migration_type(type)
@@ -2324,6 +2326,7 @@ defmodule AshMysql.MigrationGenerator do
       |> unwrap_type()
       |> Ash.Type.get_type()
 
+    Code.ensure_loaded!(type)
     if function_exported?(type, :value_to_mysql_default, 3) do
       type.value_to_mysql_default(type, constraints, value)
     else
