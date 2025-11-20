@@ -419,6 +419,7 @@ defmodule AshMysql.DataLayer do
   def can?(_, :create), do: true
   def can?(_, :select), do: true
   def can?(_, :read), do: true
+  def can?(_, :expr_error), do: true
 
   def can?(resource, action) when action in ~w[update destroy]a do
     resource
