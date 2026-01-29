@@ -58,7 +58,7 @@ defmodule AshMysql.TestRepo.Migrations.MigrateResources1 do
       add :decimal, :decimal
       add :price, :bigint
       add :type, :string
-      add :category, :"VARCHAR(255) COLLATE utf8mb4_0900_ai_ci"
+      add :category, :"VARCHAR(255)"
       add :public, :boolean
       add :score, :bigint
       add :title, :string

@@ -26,15 +26,16 @@ if Mix.env() == :test do
   config :ash, :validate_domain_config_inclusion?, false
 
   config :ash_mysql, AshMysql.TestRepo,
-    username: "root",
+    username: "sa",
     database: "ash_mysql_test",
     hostname: "localhost",
     log_stacktrace_mfa: fn t, _, _ -> t end,
     pool: Ecto.Adapters.SQL.Sandbox,
     # sobelow_skip ["Config.Secrets"]
-    password: "root",
-    charset: "utf8mb4",
-    collation: "utf8mb4_0900_as_cs"
+    password: "AdminFor278"
+    #,
+    #charset: "utf8mb4",
+    #collation: "utf8mb4_0900_as_cs"
 
   config :ash_mysql, AshMysql.TestRepo, migration_primary_key: [name: :id, type: :binary_id]
 

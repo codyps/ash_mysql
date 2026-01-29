@@ -456,6 +456,24 @@ defmodule AshMysql.DataLayer do
     AshMysql.DataLayer.Info.repo(resource).in_transaction?()
   end
 
+  @impl true
+  def transaction(resource, func, timeout \\ nil, reason \\ %{type: :custom, metadata: %{}}) do
+    repo =
+      case reason[:data_layer_context] do
+        %{repo: repo} when not is_nil(repo) ->
+          repo
+
+        _ ->
+          AshMysql.DataLayer.Info.repo(resource)
+      end
+
+    if timeout do
+      repo.transaction(func, timeout: timeout)
+    else
+      repo.transaction(func)
+    end
+  end
+
   if Code.ensure_loaded?(Igniter) do
     def install(igniter, module, Ash.Resource, _path, argv) do
       table_name =
