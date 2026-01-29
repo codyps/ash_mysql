@@ -389,7 +389,7 @@ defmodule AshMysql.DataLayer do
   def can?(_, :bulk_create), do: true
   def can?(_, {:lock, _}), do: false
 
-  def can?(_, :transact), do: false
+  def can?(_, :transact), do: true
   def can?(_, :composite_primary_key), do: true
   def can?(_, {:atomic, :update}), do: true
   def can?(_, {:atomic, :upsert}), do: false
@@ -450,6 +450,11 @@ defmodule AshMysql.DataLayer do
   def can?(_, :distinct), do: false
   def can?(_, {:sort, _}), do: true
   def can?(_, _), do: false
+
+  @impl true
+  def in_transaction?(resource) do
+    AshMysql.DataLayer.Info.repo(resource).in_transaction?()
+  end
 
   if Code.ensure_loaded?(Igniter) do
     def install(igniter, module, Ash.Resource, _path, argv) do
