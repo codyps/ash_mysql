@@ -38,7 +38,11 @@ defmodule AshMysql.Repo do
 
       @behaviour AshMysql.Repo
 
-      defoverridable insert: 2, insert: 1, insert!: 2, insert!: 1
+      defoverridable insert: 2, insert: 1, insert!: 2, insert!: 1, transaction: 1, transaction: 2
+
+      def transaction(fun, opts \\ []) do
+        super(fun, opts)
+      end
 
       def installed_extensions, do: []
       def migrations_path, do: nil
