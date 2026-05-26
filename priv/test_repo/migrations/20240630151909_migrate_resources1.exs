@@ -151,9 +151,16 @@ defmodule AshMysql.TestRepo.Migrations.MigrateResources1 do
       add :id, :uuid, null: false, primary_key: true
     end
 
-    create index(:posts, ["uniq_custom_one", "uniq_custom_two"], unique: true)
+  # MSSQL treats multiple NULLs as duplicate unique keys; filter them out like PostgreSQL.
+    create unique_index(:posts, [:uniq_custom_one, :uniq_custom_two],
+             name: "posts_uniq_custom_one_uniq_custom_two_index",
+             where: "uniq_custom_one IS NOT NULL AND uniq_custom_two IS NOT NULL"
+           )
 
-    create unique_index(:posts, [:uniq_one, :uniq_two], name: "posts_uniq_one_and_two_index")
+    create unique_index(:posts, [:uniq_one, :uniq_two],
+             name: "posts_uniq_one_and_two_index",
+             where: "uniq_one IS NOT NULL AND uniq_two IS NOT NULL"
+           )
 
     create table(:accounts, primary_key: false) do
       add :user_id, references(:users, column: :id, name: "accounts_user_id_fkey", type: :uuid)

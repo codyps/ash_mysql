@@ -802,9 +802,20 @@ defmodule AshMysql.DataLayer do
           |> repo.all()
 
         {1, _, []} ->
-          # one record with pkey, we can probably count on LAST_INSERT_ID()
-          Ecto.Query.from(s in source, where: field(s, ^pkey) == fragment("LAST_INSERT_ID()"))
+          # one record with pkey, reload via SCOPE_IDENTITY() on SQL Server
+          Ecto.Query.from(s in source,
+            where: field(s, ^pkey) == fragment("CAST(SCOPE_IDENTITY() AS bigint)")
+          )
           |> repo.all()
+          |> case do
+            [] ->
+              repo.all(
+                from(s in source, order_by: [desc: field(s, ^pkey)], limit: 1)
+              )
+
+            records ->
+              records
+          end
 
         {_, nil, _} ->
           # Can't work without a pkey even if we have enough fields to reload
@@ -1009,6 +1020,43 @@ defmodule AshMysql.DataLayer do
     )
   end
 
+  defp handle_raised_error(
+         %Tds.Error{} = error,
+         stacktrace,
+         {:bulk_create, _fake_changeset},
+         resource
+       ) do
+    case Ecto.Adapters.Tds.Connection.to_constraints(error, []) do
+      [] ->
+        {:error, Ash.Error.to_ash_error(error, stacktrace)}
+
+      constraints ->
+        {:error, tds_constraints_to_errors(constraints, resource)}
+    end
+  end
+
+  defp tds_constraints_to_errors(constraints, resource) do
+    Enum.flat_map(constraints, fn
+      {:unique, constraint} ->
+        index_name = String.to_atom(constraint)
+
+        case find_constraint_data(resource, index_name) do
+          %{fields: fields, message: message} ->
+            message = message || "has already been taken"
+
+            Enum.map(fields, fn field ->
+              Ash.Error.Changes.InvalidAttribute.exception(field: field, message: message)
+            end)
+
+          nil ->
+            []
+        end
+
+      _ ->
+        []
+    end)
+  end
+
   # sobelow_skip ["DOS.StringToAtom"]
   defp handle_raised_error(
          %MyXQL.Error{
@@ -1053,7 +1101,14 @@ defmodule AshMysql.DataLayer do
   end
 
   defp find_constraint_data(resource, index_name) do
-    find_custom_index(resource, index_name) || find_identity(resource, index_name)
+    table = AshMysql.DataLayer.Info.table(resource)
+    pkey_name = String.to_atom("#{table}_pkey")
+
+    if index_name == pkey_name do
+      %{fields: Ash.Resource.Info.primary_key(resource), message: "has already been taken"}
+    else
+      find_custom_index(resource, index_name) || find_identity(resource, index_name)
+    end
   end
 
   defp find_custom_index(resource, searched_name) do

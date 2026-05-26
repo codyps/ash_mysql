@@ -136,15 +136,14 @@ defmodule AshMysql.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      #{:ecto_sql, "~> 3.12"},
-      {:ecto_sql, path: "../ecto_sql", override: true},
+      {:ecto_sql, ecto_sql_version("~> 3.12")},
       {:myxql, ">= 0.0.0"},
       {:tds, ">= 0.0.0"},
-      {:ecto, "~> 3.12", override: true},
+      {:ecto, ecto_version("~> 3.12")},
       {:jason, "~> 1.0"},
       {:ash, ash_version("~> 3.7")},
       {:picosat_elixir, "~> 0.2"},
-      {:ash_sql, ash_sql_version("~> 0.2")},
+      {:ash_sql, ash_sql_version("~> 0.6.3")},
       {:igniter, "~> 0.5", only: [:dev, :test]},
       {:git_ops, "~> 2.5", only: [:dev, :test]},
       {:ex_doc, "~> 0.22", only: [:dev, :test], runtime: false},
@@ -154,6 +153,26 @@ defmodule AshMysql.MixProject do
       {:sobelow, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:mix_audit, ">= 0.0.0", only: [:dev, :test], runtime: false}
     ]
+  end
+
+  defp ecto_sql_version(default_version) do
+    case System.get_env("ECTO_SQL_VERSION") do
+      nil ->
+        default_version
+
+      "local" ->
+        [path: "../ecto_sql", override: true]
+    end
+  end
+
+  defp ecto_version(default_version) do
+    case System.get_env("ECTO_VERSION") do
+      nil ->
+        default_version
+
+      "local" ->
+        [path: "../ecto", override: true]
+    end
   end
 
   defp ash_version(default_version) do

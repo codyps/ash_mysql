@@ -16,7 +16,7 @@ defmodule AshPostgres.Test.TransactionTest do
         raise "something bad happened"
       end)
       |> send_after_transaction_result()
-      |> Ash.create() |> dbg()
+      |> Ash.create()
     end
 
     assert_receive {:error,

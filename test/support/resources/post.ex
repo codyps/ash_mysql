@@ -185,7 +185,7 @@ defmodule AshMysql.Test.Post do
       expr(
         # This is written in a silly way on purpose, to test a regression
         if(
-          fragment("(? <= (DATE(? - '+1 month')))", now(), created_at),
+          fragment("? >= DATEADD(month, -1, SYSUTCDATETIME())", created_at),
           true,
           false
         )

@@ -15,10 +15,10 @@ defmodule AshMysql.SqlImplementation do
   def manual_relationship_subquery_function, do: :ash_mysql_subquery
 
   @impl true
-  def strpos_function, do: "instr"
+  def strpos_function, do: "CHARINDEX"
 
   @impl true
-  def ilike?, do: false
+  def ilike?, do: true
 
   @impl true
   def expr(
@@ -38,7 +38,13 @@ defmodule AshMysql.SqlImplementation do
 
     inner_dyn =
       if like == AshMysql.Functions.Like do
-        Ecto.Query.dynamic(like(^arg1, ^arg2))
+        Ecto.Query.dynamic(
+          fragment(
+            "? COLLATE Latin1_General_CS_AS LIKE ? COLLATE Latin1_General_CS_AS",
+            ^arg1,
+            ^arg2
+          )
+        )
       else
         Ecto.Query.dynamic(like(fragment("LOWER(?)", ^arg1), fragment("LOWER(?)", ^arg2)))
       end
@@ -226,7 +232,7 @@ defmodule AshMysql.SqlImplementation do
               arguments: [
                 raw: "CASE WHEN (",
                 casted_expr: left_expr,
-                raw: " LIKE FALSE OR ",
+                raw: " LIKE CAST(0 AS bit) OR ",
                 casted_expr: left_expr,
                 raw: " IS NULL) THEN ",
                 casted_expr: right_expr,
@@ -249,7 +255,7 @@ defmodule AshMysql.SqlImplementation do
               arguments: [
                 raw: "CASE WHEN (",
                 casted_expr: left_expr,
-                raw: " LIKE FALSE OR ",
+                raw: " LIKE CAST(0 AS bit) OR ",
                 casted_expr: left_expr,
                 raw: " IS NULL) THEN ",
                 casted_expr: left_expr,
@@ -301,7 +307,7 @@ defmodule AshMysql.SqlImplementation do
         Ecto.Query.dynamic(type(^expr, ^type))
 
       Ash.Type.storage_type(type, []) == :ci_string ->
-        Ecto.Query.dynamic(fragment("(? COLLATE utf8mb4_0900_ai_ci)", ^expr))
+        Ecto.Query.dynamic(fragment("(? COLLATE SQL_Latin1_General_CP1_CI_AI)", ^expr))
 
       true ->
         Ecto.Query.dynamic(type(^expr, ^Ash.Type.storage_type(type, [])))
@@ -314,7 +320,7 @@ defmodule AshMysql.SqlImplementation do
     case type do
       {:parameterized, {inner_type, constraints}} ->
         if inner_type.type(constraints) == :ci_string do
-          Ecto.Query.dynamic(fragment("(? COLLATE utf8mb4_0900_ai_ci)", ^expr))
+          Ecto.Query.dynamic(fragment("(? COLLATE SQL_Latin1_General_CP1_CI_AI)", ^expr))
         else
           Ecto.Query.dynamic(type(^expr, ^type))
         end
@@ -426,37 +432,36 @@ defmodule AshMysql.SqlImplementation do
   end
 
   defp do_get_path(
-         query,
-         %Ash.Query.Function.GetPath{arguments: [left, right], embedded?: pred_embedded?},
-         bindings,
-         embedded?,
+         _query,
+         %Ash.Query.Function.GetPath{arguments: [left, right]},
+         _bindings,
+         _embedded?,
          acc,
          _type \\ nil
        ) do
     field = Ash.Query.Ref.name(left)
-    path = Enum.map(right, &to_string/1)
+    json_path = sql_server_json_path(right)
 
     expr =
-      Ecto.Query.dynamic([row], json_extract_path(field(row, ^field), ^path))
-
-    {expr, acc} =
-      AshSql.Expr.dynamic_expr(
-        query,
-        %Ash.Query.Function.Fragment{
-          embedded?: pred_embedded?,
-          arguments: [
-            raw: "json_unquote(",
-            expr: expr,
-            raw: ")"
-          ]
-        },
-        bindings,
-        embedded?,
-        {Ash.Type.String.EctoType, []},
-        acc
+      Ecto.Query.dynamic(
+        [row],
+        fragment("JSON_VALUE(?, ?)", field(row, ^field), ^json_path)
       )
 
     {:ok, expr, acc}
+  end
+
+  defp sql_server_json_path(segments) do
+    Enum.reduce(segments, "$", fn
+      segment, path when is_integer(segment) ->
+        path <> "[#{segment}]"
+
+      segment, "$" ->
+        "$." <> to_string(segment)
+
+      segment, path ->
+        path <> "." <> to_string(segment)
+    end)
   end
 
   defp determine_type_at_path(type, path) do
