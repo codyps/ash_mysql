@@ -447,7 +447,7 @@ defmodule AshMysql.DataLayer do
   def can?(_, {:query_aggregate, _}), do: true
   def can?(_, :sort), do: true
   def can?(_, :distinct_sort), do: false
-  def can?(_, :distinct), do: false
+  def can?(_, :distinct), do: true
   def can?(_, {:sort, _}), do: true
   def can?(_, _), do: false
 
@@ -624,41 +624,22 @@ defmodule AshMysql.DataLayer do
   end
 
   @impl true
+  def return_query(query, resource) do
+    query
+    |> AshSql.Bindings.default_bindings(resource, AshMysql.SqlImplementation)
+    |> AshSql.Query.return_query(resource)
+  end
+
+  @impl true
   def run_query(query, resource) do
-    with_sort_applied =
-      if query.__ash_bindings__[:sort_applied?] do
-        {:ok, query}
-      else
-        AshSql.Sort.apply_sort(query, query.__ash_bindings__[:sort], resource)
-      end
+    query = AshSql.Bindings.default_bindings(query, resource, AshMysql.SqlImplementation)
 
-    case with_sort_applied do
-      {:error, error} ->
-        {:error, error}
-
-      {:ok, query} ->
-        query =
-          if query.__ash_bindings__[:__order__?] && query.windows[:order] do
-            order_by = %{query.windows[:order] | expr: query.windows[:order].expr[:order_by]}
-
-            %{
-              query
-              | windows: Keyword.delete(query.windows, :order),
-                order_bys: [order_by]
-            }
-          else
-            %{query | windows: Keyword.delete(query.windows, :order)}
-          end
-
-        if AshMysql.DataLayer.Info.polymorphic?(resource) && no_table?(query) do
-          raise_table_error!(resource, :read)
-        else
-          primary_key = Ash.Resource.Info.primary_key(resource)
-
-          {:ok,
-           dynamic_repo(resource, query).all(query, repo_opts(nil, nil, resource))
-           |> Enum.uniq_by(&Map.take(&1, primary_key))}
-        end
+    if AshMysql.DataLayer.Info.polymorphic?(resource) && no_table?(query) do
+      raise_table_error!(resource, :read)
+    else
+      {:ok,
+       dynamic_repo(resource, query).all(query, repo_opts(nil, nil, resource))
+       |> AshSql.Query.remap_mapped_fields(query)}
     end
   rescue
     e ->
@@ -1552,6 +1533,11 @@ defmodule AshMysql.DataLayer do
   def unwrap_one([thing]), do: thing
   def unwrap_one([]), do: nil
   def unwrap_one(other), do: other
+
+  @impl true
+  def distinct(query, distinct, resource) do
+    AshMysql.Distinct.distinct(query, distinct, resource)
+  end
 
   @impl true
   def filter(query, filter, _resource, opts \\ []) do

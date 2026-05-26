@@ -32,7 +32,8 @@ if Mix.env() == :test do
     log_stacktrace_mfa: fn t, _, _ -> t end,
     pool: Ecto.Adapters.SQL.Sandbox,
     # sobelow_skip ["Config.Secrets"]
-    password: "AdminFor278"
+    password: "AdminFor278",
+    port: 1433
     #,
     #charset: "utf8mb4",
     #collation: "utf8mb4_0900_as_cs"
