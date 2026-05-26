@@ -150,6 +150,9 @@ defmodule AshMysql.MigrationGeneratorTest do
 
   describe "creating follow up migrations" do
     setup do
+      File.rm_rf!("test_snapshots_path")
+      File.rm_rf!("test_migration_path")
+
       on_exit(fn ->
         File.rm_rf!("test_snapshots_path")
         File.rm_rf!("test_migration_path")

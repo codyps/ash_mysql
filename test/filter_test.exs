@@ -39,7 +39,9 @@ defmodule AshMysql.FilterTest do
           assert Ash.get!(IntegerPost, %{id: post.id})
         end)
 
-      assert String.contains?(output, "WHERE (i0.`id` = ?)")
+      assert String.contains?(output, "WHERE") and
+               (String.contains?(output, "i0.`id` = ?") or
+                  String.contains?(output, "i0.[id] = @"))
     end
   end
 

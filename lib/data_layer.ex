@@ -632,7 +632,10 @@ defmodule AshMysql.DataLayer do
 
   @impl true
   def run_query(query, resource) do
-    query = AshSql.Bindings.default_bindings(query, resource, AshMysql.SqlImplementation)
+    query =
+      query
+      |> AshSql.Bindings.default_bindings(resource, AshMysql.SqlImplementation)
+      |> AshMysql.Query.prepare_for_mssql()
 
     if AshMysql.DataLayer.Info.polymorphic?(resource) && no_table?(query) do
       raise_table_error!(resource, :read)
@@ -1020,43 +1023,6 @@ defmodule AshMysql.DataLayer do
     )
   end
 
-  defp handle_raised_error(
-         %Tds.Error{} = error,
-         stacktrace,
-         {:bulk_create, _fake_changeset},
-         resource
-       ) do
-    case Ecto.Adapters.Tds.Connection.to_constraints(error, []) do
-      [] ->
-        {:error, Ash.Error.to_ash_error(error, stacktrace)}
-
-      constraints ->
-        {:error, tds_constraints_to_errors(constraints, resource)}
-    end
-  end
-
-  defp tds_constraints_to_errors(constraints, resource) do
-    Enum.flat_map(constraints, fn
-      {:unique, constraint} ->
-        index_name = String.to_atom(constraint)
-
-        case find_constraint_data(resource, index_name) do
-          %{fields: fields, message: message} ->
-            message = message || "has already been taken"
-
-            Enum.map(fields, fn field ->
-              Ash.Error.Changes.InvalidAttribute.exception(field: field, message: message)
-            end)
-
-          nil ->
-            []
-        end
-
-      _ ->
-        []
-    end)
-  end
-
   # sobelow_skip ["DOS.StringToAtom"]
   defp handle_raised_error(
          %MyXQL.Error{
@@ -1087,6 +1053,135 @@ defmodule AshMysql.DataLayer do
          message: message
        )
      end)}
+  end
+
+  defp handle_raised_error(%Tds.Error{} = error, stacktrace, _context, resource) do
+    handle_tds_error(error, stacktrace, resource)
+  end
+
+  defp handle_tds_error(%Tds.Error{} = error, stacktrace, resource) do
+    constraints =
+      case Ecto.Adapters.Tds.Connection.to_constraints(error, []) do
+        [] -> tds_constraints_from_message(error)
+        constraints -> constraints
+      end
+
+    errors = tds_constraints_to_errors(constraints, resource)
+
+    if errors == [] do
+      {:error, Ash.Error.to_ash_error(error, stacktrace)}
+    else
+      {:error, errors}
+    end
+  end
+
+  defp tds_constraints_from_message(%Tds.Error{mssql: %{number: 547, msg_text: msg}}) do
+    case constraint_name_from_message(msg) do
+      nil -> []
+      name -> [{:foreign_key, name}]
+    end
+  end
+
+  defp tds_constraints_from_message(%Tds.Error{mssql: %{number: code, msg_text: msg}})
+       when code in [2601, 2627] do
+    case constraint_name_from_message(msg) do
+      nil -> []
+      name -> [{:unique, name}]
+    end
+  end
+
+  defp tds_constraints_from_message(_), do: []
+
+  defp constraint_name_from_message(msg) do
+    [
+      ~r/PRIMARY KEY constraint '([^']+)'/,
+      ~r/UNIQUE KEY constraint '([^']+)'/,
+      ~r/unique index '([^']+)'/i,
+      ~r/FOREIGN KEY constraint "([^"]+)"/,
+      ~r/FOREIGN KEY constraint '([^']+)'/
+    ]
+    |> Enum.find_value(fn regex ->
+      case Regex.run(regex, msg, capture: :all_but_first) do
+        [name] -> name
+        _ -> nil
+      end
+    end)
+  end
+
+  defp tds_constraints_to_errors(constraints, resource) do
+    Enum.flat_map(constraints, fn
+      {:unique, constraint} ->
+        index_name = String.to_atom(constraint)
+
+        case find_constraint_data(resource, index_name) do
+          %{fields: fields, message: message} ->
+            message = message || "has already been taken"
+
+            Enum.map(fields, fn field ->
+              Ash.Error.Changes.InvalidAttribute.exception(field: field, message: message)
+            end)
+
+          nil ->
+            []
+        end
+
+      {:foreign_key, constraint} ->
+        fields = fk_constraint_fields(resource, constraint)
+
+        [
+          Ash.Error.Changes.InvalidChanges.exception(
+            fields: fields,
+            message: "referenced something that does not exist"
+          )
+        ]
+
+      _ ->
+        []
+    end)
+  end
+
+  defp fk_constraint_fields(resource, constraint_name) do
+    case configured_foreign_key_field(resource, constraint_name) do
+      nil ->
+        case parse_fk_field(resource, constraint_name) do
+          nil -> Ash.Resource.Info.primary_key(resource)
+          field -> [field]
+        end
+
+      field ->
+        [field]
+    end
+  end
+
+  defp configured_foreign_key_field(resource, constraint_name) do
+    resource
+    |> AshMysql.DataLayer.Info.foreign_key_names()
+    |> Enum.find_value(fn
+      {key, name} when name == constraint_name -> key
+      {key, name, _} when name == constraint_name -> key
+      _ -> nil
+    end)
+  end
+
+  defp parse_fk_field(resource, constraint_name) do
+    table = AshMysql.DataLayer.Info.table(resource)
+
+    constraint_name
+    |> String.replace_suffix("_fkey", "")
+    |> String.replace_prefix("#{table}_", "")
+    |> case do
+      "" ->
+        nil
+
+      field ->
+        field_atom = String.to_atom(field)
+
+        if Ash.Resource.Info.attribute(resource, field_atom) do
+          field_atom
+        else
+          nil
+        end
+    end
   end
 
   defp handle_raised_error(error, stacktrace, _ecto_changeset, _resource) do
