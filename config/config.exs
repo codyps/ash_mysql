@@ -33,22 +33,16 @@ if Mix.env() == :test do
     pool: Ecto.Adapters.SQL.Sandbox,
     # sobelow_skip ["Config.Secrets"]
     password: "AdminFor278",
-    port: 1433
-    #,
-    #charset: "utf8mb4",
-    #collation: "utf8mb4_0900_as_cs"
-
-  config :ash_mysql, AshMysql.TestRepo, migration_primary_key: [name: :id, type: :binary_id]
+    port: 21539,
+    migration_primary_key: [name: :id, type: :binary_id]
 
   config :ash_mysql, AshMysql.TestNoSandboxRepo,
     username: "root",
     database: "ash_mysql_test",
-    hostname: "localhost"
-
-  # sobelow_skip ["Config.Secrets"]
-  config :ash_mysql, AshMysql.TestNoSandboxRepo, password: "root"
-
-  config :ash_mysql, AshMysql.TestNoSandboxRepo,
+    hostname: "localhost",
+    # sobelow_skip ["Config.Secrets"]
+    password: "AdminFor278",
+    port: 21539,
     migration_primary_key: [name: :id, type: :binary_id]
 
   # ecto_repos: [AshMysql.TestRepo, AshMysql.TestNoSandboxRepo],
