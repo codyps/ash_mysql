@@ -136,10 +136,10 @@ defmodule AshMysql.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ecto_sql, ecto_sql_version("~> 3.12")},
+      {:ecto_sql, ecto_sql_version("~> 3.14")},
       {:myxql, ">= 0.0.0"},
       {:tds, ">= 0.0.0"},
-      {:ecto, ecto_version("~> 3.12")},
+      {:ecto, ecto_version("~> 3.14")},
       {:jason, "~> 1.0"},
       {:ash, ash_version("~> 3.7")},
       {:picosat_elixir, "~> 0.2"},
