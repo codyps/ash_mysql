@@ -25,6 +25,66 @@ defmodule AshMysql.BulkCreateTest do
                |> Enum.sort_by(fn {:ok, result} -> result.title end)
     end
 
+    test "bulk creates with upsert?: true return a clear error instead of plain-inserting" do
+      assert %Ash.BulkResult{status: :error, errors: [error]} =
+               Ash.bulk_create([%{title: "fred"}], Post, :create,
+                 upsert?: true,
+                 upsert_fields: [:title],
+                 return_errors?: true
+               )
+
+      assert Exception.message(error) =~ "Upsert is not supported by the data layer"
+
+      assert [] = Ash.read!(Post)
+    end
+
+    test "bulk creates with upsert?: true and return_skipped_upsert?: true return a clear error" do
+      # This combination makes ash core fall back to per-changeset
+      # `Ash.DataLayer.upsert/3` calls, bypassing `bulk_create` entirely.
+      assert %Ash.BulkResult{status: :error, errors: [error]} =
+               Ash.bulk_create([%{title: "fred"}], Post, :create,
+                 upsert?: true,
+                 upsert_fields: [:title],
+                 return_skipped_upsert?: true,
+                 return_errors?: true
+               )
+
+      assert Exception.message(error) =~ "Upsert is not supported by the data layer"
+
+      assert [] = Ash.read!(Post)
+    end
+
+    test "bulk creates against a schema-scoped table reload from that schema" do
+      # DDL is transactional on SQL Server, so these roll back with the sandbox.
+      TestRepo.query!("CREATE SCHEMA other_schema")
+      TestRepo.query!("SELECT * INTO other_schema.posts FROM dbo.posts WHERE 1 = 0")
+
+      result =
+        Ash.bulk_create!([%{title: "fred"}, %{title: "george"}], Post, :create,
+          return_records?: true,
+          context: %{data_layer: %{schema: "other_schema"}}
+        )
+
+      # The reload must run against other_schema.posts — before threading the
+      # insert opts into the reload queries this crashed (reload against
+      # dbo.posts found no rows).
+      assert [%{title: "fred"}, %{title: "george"}] =
+               Enum.sort_by(result.records, & &1.title)
+
+      assert %{rows: [[2]]} = TestRepo.query!("SELECT COUNT(*) FROM other_schema.posts")
+      assert [] = Ash.read!(Post)
+    end
+
+    test "bulk creates accept a tenant on non-context-multitenant resources" do
+      # repo_opts/3 used to only have a nil-tenant clause, so any non-nil
+      # tenant crashed with a FunctionClauseError before reaching the insert.
+      assert %Ash.BulkResult{status: :success} =
+               Ash.bulk_create([%{title: "fred"}], Post, :create,
+                 tenant: "some_tenant",
+                 return_errors?: true
+               )
+    end
+
     # no upserts for now. hopefully later
     @tag :skip
     test "bulk creates can upsert" do

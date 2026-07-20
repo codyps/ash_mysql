@@ -47,6 +47,8 @@ defmodule AshMysql.Test.Post do
       pagination(offset?: true, required?: true)
     end
 
+    create(:create_barebones)
+
     create :create do
       primary?(true)
       argument(:rating, :map)
@@ -90,8 +92,13 @@ defmodule AshMysql.Test.Post do
     attribute(:stuff, :map, public?: true)
     attribute(:uniq_one, :string, public?: true)
     attribute(:uniq_two, :string, public?: true)
-    attribute(:uniq_custom_one, :string, public?: true)
-    attribute(:uniq_custom_two, :string, public?: true)
+    attribute(:uniq_custom_one, :string, public?: true, select_by_default?: false)
+
+    attribute(:uniq_custom_two, :string,
+      public?: true,
+      select_by_default?: false,
+      always_select?: true
+    )
     create_timestamp(:created_at)
     update_timestamp(:updated_at)
   end

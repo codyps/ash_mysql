@@ -418,6 +418,7 @@ defmodule AshMysql.DataLayer do
   def can?(_, :expression_calculation_sort), do: true
   def can?(_, :create), do: true
   def can?(_, :select), do: true
+  def can?(_, :action_select), do: true
   def can?(_, :read), do: true
   def can?(_, :expr_error), do: true
 
@@ -652,8 +653,12 @@ defmodule AshMysql.DataLayer do
   defp no_table?(%{from: %{source: {"", _}}}), do: true
   defp no_table?(_), do: false
 
-  defp repo_opts(timeout, nil, _resource) do
-    []
+  defp repo_opts(timeout, tenant, resource) do
+    if tenant && Ash.Resource.Info.multitenancy_strategy(resource) == :context do
+      [prefix: tenant]
+    else
+      []
+    end
     |> add_timeout(timeout)
   end
 
@@ -682,6 +687,33 @@ defmodule AshMysql.DataLayer do
 
   @impl true
   def bulk_create(resource, stream, options) do
+    # Ash core only gates bulk upserts on `can?(:bulk_create)`, not
+    # `can?(:upsert)`, so `Ash.bulk_create(..., upsert?: true)` reaches this
+    # data layer even though upserts are unsupported. Without this guard the
+    # entries would run as a plain INSERT: a duplicate-key error at best,
+    # silent duplicates at worst.
+    if options[:upsert?] do
+      {:error, upsert_not_supported_error()}
+    else
+      do_bulk_create(resource, stream, options)
+    end
+  end
+
+  # Ash core calls this directly (bypassing `can?(:upsert)`) for bulk upserts
+  # with `return_skipped_upsert?: true`; without it that path crashes with an
+  # UndefinedFunctionError.
+  @impl true
+  def upsert(_resource, _changeset, _keys) do
+    {:error, upsert_not_supported_error()}
+  end
+
+  defp upsert_not_supported_error do
+    Ash.Error.Changes.InvalidChanges.exception(
+      message: "Upsert is not supported by the data layer for this resource"
+    )
+  end
+
+  defp do_bulk_create(resource, stream, options) do
     changesets = Enum.to_list(stream)
 
     repo = dynamic_repo(resource, Enum.at(changesets, 0))
@@ -747,7 +779,34 @@ defmodule AshMysql.DataLayer do
 
       ecto_changesets = Enum.map(changesets, & &1.attributes)
       resource_for_returning = if options.return_records?, do: resource, else: nil
-      result = insert_all_returning(source, ecto_changesets, repo, resource_for_returning, opts)
+
+      # The reload queries in `insert_all_returning/6` locate and reorder rows by
+      # primary key, so it must stay selected regardless of what the action asks for.
+      # `always_select?` attributes must also stay selected: ash core's NotLoaded
+      # masking assumes the data layer loaded them, so dropping them here would
+      # surface them as loaded `nil`s.
+      action_select =
+        case options[:action_select] do
+          nil ->
+            nil
+
+          fields ->
+            fields
+            |> Enum.concat(Ash.Resource.Info.primary_key(resource))
+            |> Enum.concat(Ash.Resource.Info.always_selected_attribute_names(resource))
+            |> Enum.uniq()
+            |> nil_if_empty()
+        end
+
+      result =
+        insert_all_returning(
+          source,
+          ecto_changesets,
+          repo,
+          resource_for_returning,
+          action_select,
+          opts
+        )
 
       case result do
         {_, nil} ->
@@ -780,12 +839,17 @@ defmodule AshMysql.DataLayer do
     end
   end
 
-  defp insert_all_returning(source, entries, repo, nil, opts) do
+  defp insert_all_returning(source, entries, repo, nil, _action_select, opts) do
     repo.insert_all(source, entries, opts)
   end
 
-  defp insert_all_returning(source, entries, repo, resource, opts) do
+  defp insert_all_returning(source, entries, repo, resource, action_select, opts) do
     {count, nil} = repo.insert_all(source, entries, opts)
+
+    # The reloads must run with the same opts as the insert itself — most
+    # importantly the same `:prefix`, or rows inserted into a schema-scoped
+    # table would be reloaded from the default schema.
+    reload_opts = Keyword.take(opts, [:prefix, :timeout])
 
     # Can't work if pkey is composed since Ecto doesn't know to build `where {k1, k2} in ^array` requests
     pkey = Ash.Resource.Info.primary_key(resource) |> Enum.at(0)
@@ -802,19 +866,21 @@ defmodule AshMysql.DataLayer do
           params = entries |> Enum.at(0) |> Map.to_list()
 
           Ecto.Query.from(s in source, where: ^params)
-          |> repo.all()
+          |> apply_action_select(action_select)
+          |> repo.all(reload_opts)
 
         {1, _, []} ->
           # one record with pkey, reload via SCOPE_IDENTITY() on SQL Server
           Ecto.Query.from(s in source,
             where: field(s, ^pkey) == fragment("CAST(SCOPE_IDENTITY() AS bigint)")
           )
-          |> repo.all()
+          |> apply_action_select(action_select)
+          |> repo.all(reload_opts)
           |> case do
             [] ->
-              repo.all(
-                from(s in source, order_by: [desc: field(s, ^pkey)], limit: 1)
-              )
+              from(s in source, order_by: [desc: field(s, ^pkey)], limit: 1)
+              |> apply_action_select(action_select)
+              |> repo.all(reload_opts)
 
             records ->
               records
@@ -829,7 +895,8 @@ defmodule AshMysql.DataLayer do
         {_, _, _} ->
           unordered =
             Ecto.Query.from(s in source, where: field(s, ^pkey) in ^keys_to_reload)
-            |> repo.all()
+            |> apply_action_select(action_select)
+            |> repo.all(reload_opts)
 
           indexed = unordered |> Enum.group_by(&Map.get(&1, pkey))
 
@@ -839,6 +906,15 @@ defmodule AshMysql.DataLayer do
 
     {count, result}
   end
+
+  defp apply_action_select(query, nil), do: query
+
+  defp apply_action_select(query, fields) do
+    Ecto.Query.select(query, [s], struct(s, ^fields))
+  end
+
+  defp nil_if_empty([]), do: nil
+  defp nil_if_empty(other), do: other
 
   # defp upsert_set(resource, changesets, options) do
   #   attributes_changing_anywhere =
@@ -904,6 +980,7 @@ defmodule AshMysql.DataLayer do
     case bulk_create(resource, [changeset], %{
            single?: true,
            tenant: changeset.tenant,
+           action_select: changeset.action_select,
            return_records?: true
          }) do
       {:ok, [result]} ->
@@ -1570,7 +1647,23 @@ defmodule AshMysql.DataLayer do
     try do
       query = from(row in resource, as: ^0)
 
-      select = Keyword.keys(changeset.atomics) ++ Ash.Resource.Info.primary_key(resource)
+      # Atomics are computed in the database, so their values must come from the
+      # reload. The action_select fields only fill in whatever the changeset
+      # doesn't already carry — attributes written by this changeset stay
+      # authoritative, so a concurrent writer (with `transaction?: false`)
+      # can't leak its values into our result.
+      reloaded_action_select =
+        changeset.action_select
+        |> List.wrap()
+        |> Enum.concat(Ash.Resource.Info.always_selected_attribute_names(resource))
+        |> Enum.uniq()
+        |> Kernel.--(Keyword.keys(changeset.atomics) ++ Map.keys(changeset.attributes))
+
+      select =
+        Enum.uniq(
+          Keyword.keys(changeset.atomics) ++
+            reloaded_action_select ++ Ash.Resource.Info.primary_key(resource)
+        )
 
       query =
         query
@@ -1604,7 +1697,7 @@ defmodule AshMysql.DataLayer do
           result =
             from(row in resource, as: ^0, select: ^select)
             |> pkey_filter(changeset.data)
-            |> repo.all()
+            |> repo.all(Keyword.take(repo_opts, [:prefix, :timeout]))
 
           case {count, result} do
             {0, []} ->
@@ -1618,7 +1711,9 @@ defmodule AshMysql.DataLayer do
               record =
                 changeset.data
                 |> Map.merge(changeset.attributes)
-                |> Map.merge(Map.take(result, Keyword.keys(changeset.atomics)))
+                |> Map.merge(
+                  Map.take(result, Keyword.keys(changeset.atomics) ++ reloaded_action_select)
+                )
 
               {:ok, record}
           end
