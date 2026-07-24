@@ -46,7 +46,11 @@ defmodule AshMysql.Test.Post.CommentsContainingTitle do
      Ecto.Query.from(_ in destination_query,
        where: parent_as(^current_binding).id == as(^as_binding).post_id,
        where:
-         fragment("CHARINDEX(?, ?, 1) > 0", as(^as_binding).title, parent_as(^current_binding).title)
+         fragment(
+           "CHARINDEX(?, ?, 1) > 0",
+           as(^as_binding).title,
+           parent_as(^current_binding).title
+         )
      )}
   end
 end

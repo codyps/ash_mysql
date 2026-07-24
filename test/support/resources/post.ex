@@ -78,6 +78,7 @@ defmodule AshMysql.Test.Post do
     attribute(:score, :integer, public?: true)
     attribute(:public, :boolean, public?: true)
     attribute(:category, :ci_string, public?: true)
+    attribute(:email, Test.Support.Types.Email, public?: true)
     attribute(:type, :atom, default: :sponsored, writable?: false)
     attribute(:price, :integer, public?: true)
     attribute(:decimal, :decimal, default: Decimal.new(0), public?: true)
@@ -99,6 +100,7 @@ defmodule AshMysql.Test.Post do
       select_by_default?: false,
       always_select?: true
     )
+
     create_timestamp(:created_at)
     update_timestamp(:updated_at)
   end

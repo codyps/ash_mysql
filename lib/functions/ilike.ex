@@ -4,10 +4,10 @@
 
 defmodule AshMysql.Functions.ILike do
   @moduledoc """
-  Maps to the builtin mysql function `ilike`.
+  Maps to a case-insensitive SQL `LIKE` (both sides lowercased).
   """
 
-  use Ash.Query.Function, name: :ilike
+  use Ash.Query.Function, name: :ilike, predicate?: true
 
-  def args, do: [[:string, :string]]
+  def args, do: [[:string, :string], [:ci_string, :string]]
 end

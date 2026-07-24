@@ -185,9 +185,9 @@ if Code.ensure_loaded?(Igniter) do
           "test.exs",
           otp_app,
           [repo, :username],
-          "root"
+          "sa"
         )
-        |> Igniter.Project.Config.configure_new("dev.exs", otp_app, [repo, :password], "root")
+        |> Igniter.Project.Config.configure_new("dev.exs", otp_app, [repo, :password], "sa")
         |> Igniter.Project.Config.configure_new(
           "test.exs",
           otp_app,
@@ -216,20 +216,13 @@ if Code.ensure_loaded?(Igniter) do
         igniter
       else
         igniter
-        |> Igniter.Project.Config.configure_new("dev.exs", otp_app, [repo, :username], "root")
-        |> Igniter.Project.Config.configure_new("dev.exs", otp_app, [repo, :password], "root")
-        |> Igniter.Project.Config.configure_new("dev.exs", otp_app, [repo, :charset], "utf8mb4")
+        |> Igniter.Project.Config.configure_new("dev.exs", otp_app, [repo, :username], "sa")
+        |> Igniter.Project.Config.configure_new("dev.exs", otp_app, [repo, :password], "sa")
         |> Igniter.Project.Config.configure_new(
           "dev.exs",
           otp_app,
           [repo, :show_sensitive_data_on_connection_error],
           true
-        )
-        |> Igniter.Project.Config.configure_new(
-          "dev.exs",
-          otp_app,
-          [repo, :collation],
-          "utf8mb4_0900_as_cs"
         )
         |> Igniter.Project.Config.configure_new(
           "dev.exs",

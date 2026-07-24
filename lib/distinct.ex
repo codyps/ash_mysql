@@ -120,9 +120,7 @@ defmodule AshMysql.Distinct do
         dynamic = dynamic(field(as(^binding), ^field))
 
         dynamic
-        |> then(
-          &Ecto.Query.Builder.Dynamic.partially_expand(:order_by, query, &1, [], 0)
-        )
+        |> then(&Ecto.Query.Builder.Dynamic.partially_expand(:order_by, query, &1, [], 0))
         |> elem(0)
 
       other ->

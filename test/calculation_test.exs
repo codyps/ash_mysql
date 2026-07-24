@@ -8,7 +8,7 @@ defmodule AshMysql.CalculationTest do
 
   require Ash.Query
 
-  #test "calculations can refer to embedded attributes" do
+  # test "calculations can refer to embedded attributes" do
   #  author =
   #    Author
   #    |> Ash.Changeset.for_create(:create, %{bio: %{title: "Mr.", bio: "Bones"}})
@@ -19,7 +19,7 @@ defmodule AshMysql.CalculationTest do
   #           |> Ash.Query.filter(id == ^author.id)
   #           |> Ash.Query.load(:title)
   #           |> Ash.read_one!()
-  #end
+  # end
 
   test "calculations can use the || operator" do
     author =

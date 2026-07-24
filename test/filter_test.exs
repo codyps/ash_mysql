@@ -641,6 +641,237 @@ defmodule AshMysql.FilterTest do
 
       assert [%Post{title: "MaTcH"}] = results
     end
+
+    test "like and ilike are usable as filter input predicates (as AshGraphql submits them)" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "MaTcH"})
+      |> Ash.create!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter_input(%{title: %{like: "%aTc%"}})
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter_input(%{title: %{like: "%atc%"}})
+               |> Ash.read!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter_input(%{title: %{ilike: "%atc%"}})
+               |> Ash.read!()
+    end
+
+    test "like/ilike work on ci_string attributes and match case-insensitively (citext parity)" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "match", category: "FoObAr"})
+      |> Ash.create!()
+
+      assert [%Post{title: "match"}] =
+               Post
+               |> Ash.Query.filter_input(%{category: %{like: "%oOb%"}})
+               |> Ash.read!()
+
+      assert [%Post{title: "match"}] =
+               Post
+               |> Ash.Query.filter_input(%{category: %{ilike: "%oob%"}})
+               |> Ash.read!()
+    end
+
+    test "like/ilike work on enum attributes" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "match", status_enum: :open})
+      |> Ash.create!()
+
+      assert [%Post{title: "match"}] =
+               Post
+               |> Ash.Query.filter_input(%{status_enum: %{like: "op%"}})
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter_input(%{status_enum: %{like: "OP%"}})
+               |> Ash.read!()
+
+      assert [%Post{title: "match"}] =
+               Post
+               |> Ash.Query.filter_input(%{status_enum: %{ilike: "OP%"}})
+               |> Ash.read!()
+    end
+
+    test "like/ilike work on string-based NewType attributes and stay case-sensitive" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "match", email: "USER@example.com"})
+      |> Ash.create!()
+
+      assert [%Post{title: "match"}] =
+               Post
+               |> Ash.Query.filter_input(%{email: %{like: "USER@%"}})
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter_input(%{email: %{like: "user@%"}})
+               |> Ash.read!()
+
+      assert [%Post{title: "match"}] =
+               Post
+               |> Ash.Query.filter_input(%{email: %{ilike: "user@%"}})
+               |> Ash.read!()
+    end
+  end
+
+  describe "contains" do
+    test "contains on a string is case sensitive" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "MaTcH"})
+      |> Ash.create!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter(contains(title, "aTc"))
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter(contains(title, "atc"))
+               |> Ash.read!()
+    end
+
+    test "contains with a ci_string is case insensitive" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "MaTcH"})
+      |> Ash.create!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter(contains(title, ^Ash.CiString.new("atc")))
+               |> Ash.read!()
+    end
+
+    test "contains on a ci_string attribute is case insensitive" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "match", category: "FoObAr"})
+      |> Ash.create!()
+
+      assert [%Post{title: "match"}] =
+               Post
+               |> Ash.Query.filter(contains(category, "oob"))
+               |> Ash.read!()
+    end
+
+    test "contains treats LIKE wildcards as literal characters" do
+      for title <- ["100% real", "100x real", "a_b", "axb", "[tag] post"] do
+        Post
+        |> Ash.Changeset.for_create(:create, %{title: title})
+        |> Ash.create!()
+      end
+
+      assert [%Post{title: "100% real"}] =
+               Post
+               |> Ash.Query.filter(contains(title, "0% r"))
+               |> Ash.read!()
+
+      assert [%Post{title: "a_b"}] =
+               Post
+               |> Ash.Query.filter(contains(title, "a_b"))
+               |> Ash.read!()
+
+      assert [%Post{title: "[tag] post"}] =
+               Post
+               |> Ash.Query.filter(contains(title, "[tag]"))
+               |> Ash.read!()
+    end
+  end
+
+  describe "string_starts_with/string_ends_with" do
+    test "string_starts_with matches prefixes case sensitively" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "MaTcH"})
+      |> Ash.create!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter(string_starts_with(title, "MaT"))
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter(string_starts_with(title, "mat"))
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter(string_starts_with(title, "aTc"))
+               |> Ash.read!()
+    end
+
+    test "string_ends_with matches suffixes case sensitively" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "MaTcH"})
+      |> Ash.create!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter(string_ends_with(title, "TcH"))
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter(string_ends_with(title, "tch"))
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter(string_ends_with(title, "MaT"))
+               |> Ash.read!()
+    end
+  end
+
+  describe "string functions" do
+    test "string_length uses LEN" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "MaTcH"})
+      |> Ash.create!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter(string_length(title) == 5)
+               |> Ash.read!()
+
+      assert [] =
+               Post
+               |> Ash.Query.filter(string_length(title) == 4)
+               |> Ash.read!()
+    end
+
+    test "string_trim uses LTRIM/RTRIM" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "  padded  "})
+      |> Ash.create!()
+
+      assert [%Post{}] =
+               Post
+               |> Ash.Query.filter(string_trim(title) == "padded")
+               |> Ash.read!()
+    end
+
+    test "string_position uses CHARINDEX with needle-first argument order" do
+      Post
+      |> Ash.Changeset.for_create(:create, %{title: "MaTcH"})
+      |> Ash.create!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter(string_position(title, "aTc") == 2)
+               |> Ash.read!()
+
+      assert [%Post{title: "MaTcH"}] =
+               Post
+               |> Ash.Query.filter(string_position(title, "atc") == 0)
+               |> Ash.read!()
+    end
   end
 
   describe "fragments" do

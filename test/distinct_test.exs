@@ -9,6 +9,11 @@ defmodule AshMysql.DistinctTest do
 
   require Ash.Query
 
+  # distinct requires `DISTINCT ON` or window functions, and ecto_sql's TDS
+  # connection renders neither, so the data layer declares distinct unsupported.
+  # Unskip once ecto_sql can render windows for MSSQL.
+  @moduletag :skip
+
   setup do
     # MSSQL unique indexes treat multiple NULLs as duplicates, so each row needs
     # distinct values for the optional unique columns.

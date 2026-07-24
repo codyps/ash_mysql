@@ -77,6 +77,9 @@ defmodule AshMysql.Query do
   defp maybe_add_limit_for_order_by(query), do: query
 
   defp needs_limit_for_order_by?(%{order_bys: [_ | _]}), do: true
-  defp needs_limit_for_order_by?(%{windows: windows}) when windows != [] and not is_nil(windows), do: true
+
+  defp needs_limit_for_order_by?(%{windows: windows}) when windows != [] and not is_nil(windows),
+    do: true
+
   defp needs_limit_for_order_by?(_), do: false
 end

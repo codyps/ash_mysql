@@ -443,12 +443,17 @@ defmodule AshMysql.DataLayer do
 
   def can?(_, :timeout), do: true
   def can?(_, {:filter_expr, %Ash.Query.Function.StringJoin{}}), do: false
+  # SQL Server has no array type; STRING_SPLIT returns rows, not a value
+  def can?(_, {:filter_expr, %Ash.Query.Function.StringSplit{}}), do: false
   def can?(_, {:filter_expr, _}), do: true
   def can?(_, :nested_expressions), do: true
   def can?(_, {:query_aggregate, _}), do: true
   def can?(_, :sort), do: true
   def can?(_, :distinct_sort), do: false
-  def can?(_, :distinct), do: true
+  # ash_sql implements distinct via `DISTINCT ON` or window functions, and
+  # ecto_sql's TDS connection renders neither. SQL Server itself supports
+  # ROW_NUMBER() windows, so this can flip back on once ecto_sql does.
+  def can?(_, :distinct), do: false
   def can?(_, {:sort, _}), do: true
   def can?(_, _), do: false
 

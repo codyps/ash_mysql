@@ -2069,8 +2069,9 @@ defmodule AshMysql.MigrationGenerator do
 
   defp type_migration_type(type, constraints) do
     Code.ensure_loaded!(type)
+
     if function_exported?(type, :mysql_migration_type, 1) do
-       type.mysql_migration_type(constraints)
+      type.mysql_migration_type(constraints)
     else
       nil
     end
@@ -2100,10 +2101,11 @@ defmodule AshMysql.MigrationGenerator do
 
       type =
         AshMysql.DataLayer.Info.migration_types(resource)[attribute.name] ||
-        type_migration_type(attribute.type, attribute.constraints) ||
+          type_migration_type(attribute.type, attribute.constraints) ||
           migration_type(attribute.type, attribute.constraints)
 
       Code.ensure_loaded!(repo)
+
       type =
         if function_exported?(repo, :override_migration_type, 1) do
           repo.override_migration_type(type)
@@ -2210,7 +2212,9 @@ defmodule AshMysql.MigrationGenerator do
   defp migration_type({:array, type}, constraints),
     do: {:array, migration_type(type, constraints)}
 
-  defp migration_type(Ash.Type.CiString, _), do: :"VARCHAR(255) COLLATE utf8mb4_0900_ai_ci"
+  defp migration_type(Ash.Type.CiString, _),
+    do: :"NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AI"
+
   defp migration_type(Ash.Type.UUID, _), do: :uuid
   defp migration_type(Ash.Type.Integer, _), do: :bigint
 
@@ -2223,7 +2227,7 @@ defmodule AshMysql.MigrationGenerator do
   defp migration_type_from_storage_type(:string), do: :string
 
   defp migration_type_from_storage_type(:ci_string),
-    do: :"VARCHAR(255) COLLATE utf8mb4_0900_ai_ci"
+    do: :"NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AI"
 
   defp migration_type_from_storage_type(storage_type), do: storage_type
 
@@ -2327,6 +2331,7 @@ defmodule AshMysql.MigrationGenerator do
       |> Ash.Type.get_type()
 
     Code.ensure_loaded!(type)
+
     if function_exported?(type, :value_to_mysql_default, 3) do
       type.value_to_mysql_default(type, constraints, value)
     else
